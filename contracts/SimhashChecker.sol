@@ -1,101 +1,67 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
-
-/**
- * @title SimhashChecker
- * @notice Arc Testnet (Chain ID: 5042002) — Simhash-based transaction spam filter.
- *
- * MATHEMATICAL BASIS:
- *   V = sign( Σ w_i · h_i )   [i=1..n, L=64 bit]
- *   Hamming Distance: d_H(V1, V2) = popcount(V1 XOR V2)
- *   Collision Probability: P(collision) ≈ 1 / 2^64 ≈ 5.4 × 10⁻²⁰
- *
- * HYBRID MODEL:
- *   Full Simhash pipeline is computed off-chain (lib/simhash.js).
- *   The contract only validates the 64-bit fingerprint and Hamming distance.
- */
+pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 contract SimhashChecker is Ownable, ReentrancyGuard {
-
-    uint8 public constant EPSILON          = 3;
-    uint8 public constant FINGERPRINT_BITS = 64;
-    uint256 public constant MAX_NEIGHBORS  = 20;
-
     mapping(uint64 => uint256) public fingerprintRegistry;
-
-    uint256 public totalAccepted;
+    address public authorizedVault;
+    
+    uint256 public totalChecks;
     uint256 public totalRejected;
 
-    event FingerprintAccepted(uint64 indexed fingerprint, address indexed submitter, uint256 timestamp);
-    event FingerprintRejected(uint64 indexed fingerprint, uint64 indexed collidingFingerprint, uint8 hammingDistance);
-
-    error RedundantTransaction(uint64 fingerprint, uint8 hammingDistance);
-    error InvalidFingerprint();
-    error TooManyNeighbors();
+    event FingerprintRegistered(uint64 indexed fingerprint, uint256 timestamp);
+    event FingerprintRejected(uint64 indexed fingerprint, uint64 indexed neighbor, uint256 distance);
+    event VaultAuthorized(address indexed vault);
 
     constructor() Ownable(msg.sender) {}
 
-    /**
-     * @notice Registers an incoming transaction's Simhash fingerprint.
-     * @param fingerprint  64-bit Simhash: V = sign(Σ w_i·h_i)
-     * @param neighbors    Nearby fingerprints (provided off-chain)
-     */
+    function setAuthorizedVault(address _vault) external onlyOwner {
+        authorizedVault = _vault;
+        emit VaultAuthorized(_vault);
+    }
+
     function checkAndRegister(
         uint64 fingerprint,
         uint64[] calldata neighbors
     ) external nonReentrant returns (bool) {
-        if (fingerprint == 0) revert InvalidFingerprint();
-        if (neighbors.length > MAX_NEIGHBORS) revert TooManyNeighbors();
+        // Vault veya Owner çağırabilir
+        require(msg.sender == owner() || msg.sender == authorizedVault, "Unauthorized: Only Vault or Owner");
+        
+        if (fingerprint == 0) return false;
+        
+        totalChecks++;
 
+        // 1. Redundancy Check
         if (fingerprintRegistry[fingerprint] != 0) {
             totalRejected++;
             emit FingerprintRejected(fingerprint, fingerprint, 0);
-            revert RedundantTransaction(fingerprint, 0);
+            revert("Redundant Transaction");
         }
 
+        // 2. Similarity Check (Distance < 3 is suspicious)
         for (uint256 i = 0; i < neighbors.length; i++) {
-            uint8 dist = _hammingDistance(fingerprint, neighbors[i]);
-            if (dist < EPSILON) {
+            uint256 dist = hammingDistance(fingerprint, neighbors[i]);
+            if (dist < 3) {
                 totalRejected++;
                 emit FingerprintRejected(fingerprint, neighbors[i], dist);
-                revert RedundantTransaction(fingerprint, dist);
+                revert("Spam Detected: Too similar");
             }
         }
 
         fingerprintRegistry[fingerprint] = block.timestamp;
-        totalAccepted++;
-        emit FingerprintAccepted(fingerprint, msg.sender, block.timestamp);
+        emit FingerprintRegistered(fingerprint, block.timestamp);
         return true;
     }
 
-    /**
-     * @notice d_H(V1, V2) = popcount(V1 XOR V2) — Brian Kernighan's algorithm
-     */
-    function _hammingDistance(uint64 v1, uint64 v2) internal pure returns (uint8 dist) {
-        uint64 xorVal = v1 ^ v2;
-        while (xorVal != 0) {
-            xorVal &= (xorVal - 1);
-            dist++;
+    function hammingDistance(uint64 x, uint64 y) public pure returns (uint256) {
+        uint64 val = x ^ y;
+        uint256 dist = 0;
+        while (val > 0) {
+            if (val & 1 == 1) dist++;
+            val >>= 1;
         }
-    }
-
-    function publicHammingDistance(uint64 v1, uint64 v2) external pure returns (uint8) {
-        return _hammingDistance(v1, v2);
-    }
-
-    function isRegistered(uint64 fingerprint) external view returns (bool) {
-        return fingerprintRegistry[fingerprint] != 0;
-    }
-
-    function stats() external view returns (
-        uint256 accepted, uint256 rejected, uint256 total, uint256 spamRateBps
-    ) {
-        accepted    = totalAccepted;
-        rejected    = totalRejected;
-        total       = accepted + rejected;
-        spamRateBps = total > 0 ? (rejected * 10_000) / total : 0;
+        return dist;
     }
 }

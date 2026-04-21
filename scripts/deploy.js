@@ -51,6 +51,12 @@ async function main() {
   console.log(`✅ CellularVault  : ${vaultAddr}`);
   console.log(`   Explorer       : https://testnet.arcscan.app/address/${vaultAddr}`);
 
+  // 3. Authorizing Vault in Checker
+  console.log("\n[3/3] Authorizing Vault in Checker...");
+  const authTx = await checker.setAuthorizedVault(vaultAddr);
+  await authTx.wait();
+  console.log("✅ Authorization Complete.");
+
   // Summary
   console.log("\n═══════════════════════════════════════════");
   console.log("  Add these to .env.local and Vercel:");
