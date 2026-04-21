@@ -79,7 +79,8 @@ export default function VaultPanel({ account }) {
     try {
       const signer = await getProvider().getSigner();
       const vault = new ethers.Contract(ADDRESSES.cellularVault, CELLULAR_VAULT_ABI, signer);
-      const tx = await vault.settleCell(form.cellId, ethers.encodeBytes32String(form.settlSecret));
+      // Şifreyi doğrudan string olarak gönderiyoruz, kontrat kendisi hash'leyecek
+      const tx = await vault.settleCell(form.cellId, form.settlSecret);
       const receipt = await tx.wait();
       setStatus({ type: "success", msg: "Settlement complete!", txHash: receipt.hash });
     } catch (e) {
