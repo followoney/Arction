@@ -55,11 +55,15 @@ export default function VaultPanel({ account }) {
         { gasLimit: 500000 } // Manual gas limit to bypass estimation issues
       );
       const receipt = await openTx.wait();
-      const cellId = receipt.logs?.[0]?.topics?.[1] ?? "—";
+      
+      // CellOpened eventini bul (CellularVault'tan gelen)
+      const event = receipt.logs.find(log => log.address.toLowerCase() === ADDRESSES.cellularVault.toLowerCase());
+      const cellId = event?.topics?.[1] ?? "—";
 
       setStatus({
         type: "success",
-        msg: `Success! Cell ID: ${cellId.slice(0, 18)}…`,
+        msg: `Cell opened successfully!`,
+        cellId: cellId,
         txHash: receipt.hash,
       });
     } catch (e) {
@@ -186,9 +190,24 @@ export default function VaultPanel({ account }) {
             {status.type === "loading" && <span className="spinner" />}
             <span>{status.msg}</span>
           </div>
+          {status.cellId && (
+            <div className="cell-id-display">
+              <span className="label">CELL ID:</span>
+              <code className="value">{status.cellId}</code>
+              <button 
+                className="btn-copy" 
+                onClick={() => {
+                  navigator.clipboard.writeText(status.cellId);
+                  alert("Cell ID copied to clipboard!");
+                }}
+              >
+                📋
+              </button>
+            </div>
+          )}
           {status.txHash && (
-            <a href={`${explorer}/tx/${status.txHash}`} target="_blank" rel="noreferrer">
-              {status.txHash}
+            <a href={`${explorer}/tx/${status.txHash}`} target="_blank" rel="noreferrer" className="tx-link">
+              View on Explorer ↗
             </a>
           )}
         </div>

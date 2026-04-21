@@ -44,6 +44,12 @@ async function main() {
 
   // 2. CellularVault
   console.log("\n[2/2] Deploying CellularVault...");
+  console.log(`   USDC Address : ${ARC_USDC}`);
+  console.log(`   Checker      : ${checkerAddr}`);
+
+  if (!ethers.isAddress(ARC_USDC)) throw new Error(`Invalid USDC Address: ${ARC_USDC}`);
+  if (!ethers.isAddress(checkerAddr)) throw new Error(`Invalid Checker Address: ${checkerAddr}`);
+
   const CellularVault = await ethers.getContractFactory("CellularVault");
   const vault = await CellularVault.deploy(ARC_USDC, checkerAddr);
   await vault.waitForDeployment();
