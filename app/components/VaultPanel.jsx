@@ -29,7 +29,7 @@ export default function VaultPanel({ account }) {
       const usdc = new ethers.Contract(ADDRESSES.usdc, USDC_ABI, signer);
       const vault = new ethers.Contract(ADDRESSES.cellularVault, CELLULAR_VAULT_ABI, signer);
 
-      const amount = ethers.parseUnits(form.amount, 18);
+      const amount = ethers.parseUnits(form.amount, 6);
       const tx = { from: account, to: form.recipient, amount: form.amount, token: "USDC", chainId: 5042002 };
       const { fingerprint } = computeSimhash(tx);
       const fp64 = fingerprintToUint64(fingerprint);
