@@ -30,33 +30,43 @@ export default function VaultPanel({ account }) {
       const vault = new ethers.Contract(ADDRESSES.cellularVault, CELLULAR_VAULT_ABI, signer);
 
       const amount = ethers.parseUnits(form.amount, 6);
-      console.log("Debug - Amount (6 decimals):", amount.toString());
+      console.log("Submitting Amount (6 decimals):", amount.toString());
       
       const tx = { from: account, to: form.recipient, amount: form.amount, token: "USDC", chainId: 5042002 };
       const { fingerprint } = computeSimhash(tx);
       const fp64 = fingerprintToUint64(fingerprint);
       const secretHash = ethers.keccak256(ethers.toUtf8Bytes(form.secret));
 
-      setStatus({ type: "loading", msg: "Approving USDC…" });
-      const approveTx = await usdc.approve(ADDRESSES.cellularVault, amount);
-      await approveTx.wait();
+      // Use a more robust nonce
+      const nonce = BigInt(Math.floor(Date.now() / 1000) + Math.floor(Math.random() * 1000000));
 
-      setStatus({ type: "loading", msg: "Opening cell…" });
-      const nonce = BigInt(Date.now());
+      setStatus({ type: "loading", msg: "Step 1: Approving USDC…" });
+      const currentAllowance = await usdc.allowance(account, ADDRESSES.cellularVault);
+      
+      if (currentAllowance < amount) {
+        const approveTx = await usdc.approve(ADDRESSES.cellularVault, amount);
+        await approveTx.wait();
+      }
+
+      setStatus({ type: "loading", msg: "Step 2: Opening cellular vault…" });
       const openTx = await vault.openCell(
         form.recipient, amount, secretHash,
-        BigInt(form.ttl), BigInt(fp64), [], nonce
+        BigInt(form.ttl), BigInt(fp64), [], nonce,
+        { gasLimit: 500000 } // Manual gas limit to bypass estimation issues
       );
       const receipt = await openTx.wait();
       const cellId = receipt.logs?.[0]?.topics?.[1] ?? "—";
 
       setStatus({
         type: "success",
-        msg: `Cell opened! ID: ${cellId.slice(0, 18)}…`,
+        msg: `Success! Cell ID: ${cellId.slice(0, 18)}…`,
         txHash: receipt.hash,
       });
     } catch (e) {
-      setStatus({ type: "error", msg: e.reason ?? e.message });
+      console.error("DApp Error:", e);
+      let errorMsg = e.reason || e.message;
+      if (e.data) errorMsg += " | Data: " + e.data;
+      setStatus({ type: "error", msg: errorMsg });
     }
   }
 
