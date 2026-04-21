@@ -1,0 +1,23 @@
+{
+  "framework": "nextjs",
+  "buildCommand": "next build",
+  "devCommand": "next dev",
+  "installCommand": "npm install",
+  "regions": ["fra1"],
+  "env": {
+    "NEXT_PUBLIC_ARC_CHAIN_ID": "5042002",
+    "NEXT_PUBLIC_ARC_RPC_URL": "https://rpc.testnet.arc.network",
+    "NEXT_PUBLIC_ARC_EXPLORER": "https://testnet.arcscan.app",
+    "NEXT_PUBLIC_USDC_ADDRESS": "0x3600000000000000000000000000000000000000"
+  },
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET,POST,OPTIONS" },
+        { "key": "Access-Control-Allow-Headers", "value": "Content-Type" }
+      ]
+    }
+  ]
+}

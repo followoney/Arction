@@ -1,0 +1,26 @@
+{
+  "name": "arction",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Arction — Corporate-grade DApp on Arc. Simhash spam filter + CellularVault parallel execution with USDC settlement.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "compile": "npx hardhat compile",
+    "deploy:testnet": "npx hardhat run scripts/deploy.js --network arc-testnet"
+  },
+  "dependencies": {
+    "ethers": "^6.13.0",
+    "next": "^14.2.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@openzeppelin/contracts": "^5.0.0",
+    "dotenv": "^16.4.0",
+    "hardhat": "^2.22.0"
+  }
+}
