@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useAccount } from "wagmi";
 import Header from "./components/Header";
 import Hero from "./components/Hero";
 import NetworkStatus from "./components/NetworkStatus";
@@ -10,7 +10,7 @@ import Footer from "./components/Footer";
 import WalletButton from "./components/WalletButton";
 
 export default function Home() {
-  const [account, setAccount] = useState(null);
+  const { address: account } = useAccount();
 
   const resources = [
     { label: "Arc Docs", href: "https://docs.arc.network", icon: "📄" },
@@ -42,7 +42,7 @@ export default function Home() {
                 </div>
                 <h3>Wallet Not Connected</h3>
                 <p>Connect MetaMask to interact with CellularVault on Arc Testnet.</p>
-                <WalletButton onConnect={setAccount} />
+                <WalletButton />
               </div>
             )}
           </div>
@@ -65,11 +65,6 @@ export default function Home() {
       </main>
 
       <Footer />
-
-      {/* Hidden wallet button for header sync */}
-      <div style={{ display: "none" }}>
-        <WalletButton onConnect={setAccount} />
-      </div>
     </div>
   );
 }

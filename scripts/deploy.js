@@ -18,6 +18,9 @@ const ARC_USDC = process.env.NEXT_PUBLIC_USDC_ADDRESS
 
 async function main() {
   const [deployer] = await ethers.getSigners();
+  if (!deployer) {
+    throw new Error("\n❌ DEPLOYER_PRIVATE_KEY bulunamadı! Lütfen Arction klasörü içindeki .env.local dosyasını kontrol edin.");
+  }
   const network = await ethers.provider.getNetwork();
 
   console.log("═══════════════════════════════════════════");

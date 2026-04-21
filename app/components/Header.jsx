@@ -16,10 +16,6 @@ export default function Header() {
             <div className="logo-text">
               Arc<span>tion</span>
             </div>
-            <div className="network-badge">
-              <span className="pulse-dot" />
-              Arc Testnet
-            </div>
           </div>
 
           <nav className="nav-links">
