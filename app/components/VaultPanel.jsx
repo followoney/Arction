@@ -32,7 +32,14 @@ export default function VaultPanel({ account }) {
       const amount = ethers.parseUnits(form.amount, 6);
       console.log("Submitting Amount (6 decimals):", amount.toString());
       
-      const tx = { from: account, to: form.recipient, amount: form.amount, token: "USDC", chainId: 5042002 };
+      const tx = { 
+        from: account, 
+        to: form.recipient, 
+        amount: form.amount, 
+        token: "USDC", 
+        chainId: 5042002,
+        nonce: Date.now() // Her işlemi benzersiz yapar
+      };
       const { fingerprint } = computeSimhash(tx);
       const fp64 = fingerprintToUint64(fingerprint);
       const secretHash = ethers.keccak256(ethers.toUtf8Bytes(form.secret));
