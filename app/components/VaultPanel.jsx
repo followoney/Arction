@@ -151,9 +151,9 @@ export default function VaultPanel({ account }) {
               onChange={(e) => setForm({ ...form, secret: e.target.value })} type="password" />
           </div>
           <div>
-            <label className="input-label">TTL (seconds)</label>
+            <label className="input-label">TTL (seconds) - <small>Time to claim</small></label>
             <input className="input" placeholder="3600" value={form.ttl}
-              onChange={(e) => setForm({ ...form, ttl: e.target.value })} type="number" />
+              onChange={(e) => setForm({ ...form, ttl: e.target.value || "3600" })} type="number" />
           </div>
           <button className="btn btn-primary btn-full" onClick={openCell}>
             Open Cell & Lock USDC

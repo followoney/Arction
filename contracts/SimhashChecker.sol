@@ -26,27 +26,21 @@ contract SimhashChecker is Ownable, ReentrancyGuard {
         uint64 fingerprint,
         uint64[] calldata neighbors
     ) external nonReentrant returns (bool) {
-        // Vault veya Owner çağırabilir
         require(msg.sender == owner() || msg.sender == authorizedVault, "Unauthorized: Only Vault or Owner");
         
         if (fingerprint == 0) return false;
-        
         totalChecks++;
 
-        // 1. Redundancy Check
-        if (fingerprintRegistry[fingerprint] != 0) {
-            totalRejected++;
-            emit FingerprintRejected(fingerprint, fingerprint, 0);
-            revert("Redundant Transaction");
-        }
-
-        // 2. Similarity Check (Distance < 3 is suspicious)
+        // REDUNDANCY CHECK KALDIRILDI: 
+        // Aynı parmak izine sahip işlemlerin geçmesine izin veriyoruz 
+        // çünkü her işlemin zaten benzersiz bir CellID'si var.
+        
+        // Sadece çok yakın benzerlikleri (Distance < 1) logluyoruz ama reddetmiyoruz.
         for (uint256 i = 0; i < neighbors.length; i++) {
             uint256 dist = hammingDistance(fingerprint, neighbors[i]);
-            if (dist < 3) {
-                totalRejected++;
+            if (dist == 0) {
+                // Sadece tamamen aynı olanları loglayalım
                 emit FingerprintRejected(fingerprint, neighbors[i], dist);
-                revert("Spam Detected: Too similar");
             }
         }
 
