@@ -3,27 +3,27 @@
 export default function ProtocolFlow() {
   const steps = [
     {
-      num: "1", cls: "blue",
+      num: "1", cls: "blue", icon: "⚡",
       title: "Sequencing",
       desc: "Arc Malachite BFT consensus sequences the transaction with sub-second deterministic finality.",
     },
     {
-      num: "2", cls: "purple",
+      num: "2", cls: "purple", icon: "🛡",
       title: "Verification",
       desc: "Simhash filter + Nullifier Registry prevents spam and double-spend attacks (d_H < ε = 3).",
     },
     {
-      num: "3", cls: "green",
+      num: "3", cls: "green", icon: "✓",
       title: "Settlement",
-      desc: "Circle USDC + CellularVault atomically releases funds to the recipient via CEI pattern.",
+      desc: "CellularVault atomically releases USDC funds to the recipient via CEI pattern.",
     },
   ];
 
   return (
     <div className="protocol-flow glow-card">
       <div className="panel-header">
-        <span className="panel-dot" style={{ background: "#8b5cf6" }} />
-        <h3 className="panel-title">TriSync Protocol Flow</h3>
+        <span className="panel-dot" style={{ background: "#6c63ff", boxShadow: "0 0 12px rgba(108,99,255,.3)" }} />
+        <h3 className="panel-title">TriSync Protocol</h3>
       </div>
 
       <div className="flow-steps">

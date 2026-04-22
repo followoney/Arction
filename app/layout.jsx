@@ -2,12 +2,12 @@ import "./globals.css";
 import { Providers } from "./providers";
 
 export const metadata = {
-  title: "Arction — Corporate-Grade DApp on Arc",
+  title: "Arction — Cellular Parallel Execution on Arc",
   description:
-    "Simhash spam filter + CellularVault parallel execution with USDC settlement on Arc Testnet. Sub-second finality, USDC-native gas.",
+    "CellularVault USDC settlement with Simhash spam filtering. Sub-second finality on Arc Testnet.",
   openGraph: {
     title: "Arction",
-    description: "Corporate-grade DApp on Arc — USDC settlement with sub-second finality",
+    description: "Cellular parallel execution with atomic USDC settlement on Arc Testnet",
     type: "website",
   },
 };

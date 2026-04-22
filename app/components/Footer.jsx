@@ -16,12 +16,12 @@ export default function Footer() {
           <div className="footer-links">
             {links.map(({ label, href }) => (
               <a key={label} href={href} target="_blank" rel="noreferrer" className="footer-link">
-                {label} <span style={{ opacity: 0.5 }}>↗</span>
+                {label} <span style={{ opacity: 0.4, fontSize: 10 }}>↗</span>
               </a>
             ))}
           </div>
           <p className="footer-copy">
-            Arction · Arc Testnet (Chain ID: 5042002) · Built with Circle SDK & ethers.js v6
+            Arction · Arc Testnet (5042002) · USDC Settlement · ethers.js v6
           </p>
         </div>
       </div>

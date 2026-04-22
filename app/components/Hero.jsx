@@ -12,18 +12,18 @@ export default function Hero() {
       <div className="container">
         <div className="hero-badge">
           <span className="pulse-dot" />
-          Arc Testnet · Chain ID 5042002 · USDC Gas
+          Arc Testnet · Chain 5042002 · USDC Native
         </div>
 
         <h1>
-          Simhash + Cellular
+          Cellular Parallel
           <br />
-          <span className="gradient-text">Parallel Execution</span>
+          <span className="gradient-text">Execution Engine</span>
         </h1>
 
         <p>
-          Simhash-based spam filter, cellular parallel transaction execution,
-          and Circle USDC atomic settlement on Arc Testnet.
+          Simhash-powered spam filtering with CellularVault atomic USDC
+          settlement. Sub-second finality on Arc Testnet.
         </p>
 
         <div className="kpi-grid">

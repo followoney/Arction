@@ -9,7 +9,7 @@ export default function Header() {
         <div className="header-inner">
           <div className="logo-group">
             <div className="logo-mark">
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#0ea5e9" strokeWidth="2.5">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#38d2be" strokeWidth="2.5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
             </div>
@@ -20,13 +20,13 @@ export default function Header() {
 
           <nav className="nav-links">
             <a href="https://testnet.arcscan.app" target="_blank" rel="noreferrer" className="nav-link">
-              Explorer ↗
+              Explorer
             </a>
             <a href="https://faucet.circle.com" target="_blank" rel="noreferrer" className="nav-link">
-              Faucet ↗
+              Faucet
             </a>
             <a href="https://docs.arc.network" target="_blank" rel="noreferrer" className="nav-link">
-              Docs ↗
+              Docs
             </a>
             <WalletButton />
           </nav>

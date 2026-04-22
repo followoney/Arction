@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useAccount } from "wagmi";
 import Header from "./components/Header";
 import Hero from "./components/Hero";
@@ -8,9 +9,11 @@ import VaultPanel from "./components/VaultPanel";
 import ProtocolFlow from "./components/ProtocolFlow";
 import Footer from "./components/Footer";
 import WalletButton from "./components/WalletButton";
+import CellularCanvas from "./components/CellularCanvas";
 
 export default function Home() {
   const { address: account } = useAccount();
+  const [txActive, setTxActive] = useState(false);
 
   const resources = [
     { label: "Arc Docs", href: "https://docs.arc.network", icon: "📄" },
@@ -20,7 +23,9 @@ export default function Home() {
   ];
 
   return (
-    <div>
+    <div style={{ position: "relative", zIndex: 1 }}>
+      <CellularCanvas active={txActive} />
+
       <Header />
       <Hero />
 
@@ -31,7 +36,7 @@ export default function Home() {
           {/* Left — Vault Panel */}
           <div>
             {account ? (
-              <VaultPanel account={account} />
+              <VaultPanel account={account} onTxStateChange={setTxActive} />
             ) : (
               <div className="glow-card connect-prompt">
                 <div className="connect-icon">
@@ -40,8 +45,8 @@ export default function Home() {
                       d="M21 12a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 12m18 0v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6m18 0V9M3 12V9m18-3a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6m18 0V4.5a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 4.5V6" />
                   </svg>
                 </div>
-                <h3>Wallet Not Connected</h3>
-                <p>Connect MetaMask to interact with CellularVault on Arc Testnet.</p>
+                <h3>Connect Your Wallet</h3>
+                <p>Connect MetaMask to send, claim, and manage cells on Arc Testnet.</p>
                 <WalletButton />
               </div>
             )}

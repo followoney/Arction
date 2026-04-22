@@ -30,17 +30,17 @@ export default function NetworkStatus() {
 
   const items = [
     { label: "Network", value: "Arc Testnet", cls: "accent" },
-    { label: "Chain ID", value: ARC_TESTNET.chainId, cls: "" },
-    { label: "Block", value: block ?? "—", cls: "live" },
+    { label: "Chain", value: ARC_TESTNET.chainId, cls: "" },
+    { label: "Block", value: block ? `#${block.toLocaleString()}` : "—", cls: "live" },
     { label: "Latency", value: latency ? `${latency}ms` : "—", cls: latency && latency < 500 ? "live" : "" },
-    { label: "Gas", value: "USDC (native)", cls: "" },
+    { label: "Gas", value: "USDC", cls: "accent" },
   ];
 
   return (
     <div className="network-bar glass-card">
       {items.map(({ label, value, cls }) => (
         <div key={label} className="net-item">
-          <span className="net-label">{label}:</span>
+          <span className="net-label">{label}</span>
           <span className={`net-val ${cls}`}>{value}</span>
         </div>
       ))}
