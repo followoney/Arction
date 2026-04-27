@@ -15,207 +15,125 @@ export default function VaultPanel({ account, onTxStateChange }) {
   const [status, setStatus] = useState(null);
   const [toast, setToast] = useState(null);
 
-  function showToast(msg) {
-    setToast(msg);
-    setTimeout(() => setToast(null), 2500);
-  }
-
   function getProvider() {
-    if (!window.ethereum) throw new Error("MetaMask not found. Please install MetaMask.");
+    if (!window.ethereum) throw new Error("MetaMask not found.");
     return new ethers.BrowserProvider(window.ethereum);
   }
 
-  const explorer = process.env.NEXT_PUBLIC_ARC_EXPLORER ?? "https://testnet.arcscan.app";
-
-  function formatError(e, context = "general") {
-    if (e.data && e.data !== "0x") {
-      try {
-        const iface = new ethers.Interface(CELLULAR_VAULT_ABI);
-        const decoded = iface.parseError(e.data);
-        if (decoded) return `Contract Error: ${decoded.name}`;
-      } catch { }
-    }
-    let msg = e.reason || e.shortMessage || e.message || "Unknown error";
-    msg = msg.replace(/\s*\(.*0x[a-fA-F0-9]{8,}.*\)/g, "");
-    if (msg.includes("user rejected")) return "Transaction was rejected by user.";
-    if (msg.includes("insufficient funds")) return "Insufficient balance or gas.";
-    return `Error: ${msg}`;
+  function formatError(e) {
+    console.error("Full Error Object:", e);
+    if (e.data) return `Contract Revert: ${e.data}`;
+    if (e.reason) return `Reason: ${e.reason}`;
+    if (e.message && e.message.includes("user rejected")) return "User rejected transaction.";
+    return e.shortMessage || e.message || "Unknown Blockchain Error";
   }
-
-  const setTxActive = useCallback((active) => {
-    if (onTxStateChange) onTxStateChange(active);
-  }, [onTxStateChange]);
 
   async function openCell() {
     if (!form.recipient || !form.amount || !form.secret) return;
-    setTxActive(true);
-    setStatus({ type: "loading", msg: "Connecting to Arc Testnet…" });
+    setStatus({ type: "loading", msg: "Initializing..." });
     try {
       const provider = getProvider();
       const signer = await provider.getSigner();
-      const usdc = new ethers.Contract(ADDRESSES.usdc, USDC_ABI, signer);
-      const vault = new ethers.Contract(ADDRESSES.cellularVault, CELLULAR_VAULT_ABI, signer);
+      
+      // ENSURE ADDRESSES ARE CORRECT
+      const VAULT_ADDR = "0x35eF6b0CF36ec0aE213F23FB40Ceb1A79f23B376";
+      const USDC_ADDR = "0x3600000000000000000000000000000000000000";
 
-      // Get precision
+      const usdc = new ethers.Contract(USDC_ADDR, USDC_ABI, signer);
+      const vault = new ethers.Contract(VAULT_ADDR, CELLULAR_VAULT_ABI, signer);
+
       let decimals = 6;
-      try { decimals = await usdc.decimals(); } catch { }
+      try { decimals = await usdc.decimals(); } catch(e) { console.error("Decimals failed", e); }
+      
       const amount = ethers.parseUnits(form.amount, decimals);
 
-      // Unique hash for TriSync to prevent "Already Registered" error
-      const uniqueNonce = Date.now().toString();
-      const txData = {
-        from: account,
-        to: form.recipient,
-        amount: form.amount,
-        nonce: uniqueNonce, // Milisaniyelik benzersizlik
-        salt: Math.random().toString() 
-      };
+      // TriSync uniqueness
+      const txData = { r: Math.random(), t: Date.now(), a: account, to: form.recipient };
       const { fingerprint } = computeSimhash(txData);
       const fp64 = fingerprintToUint64(fingerprint);
       const secretHash = ethers.keccak256(ethers.encodeBytes32String(form.secret));
-      const contractNonce = BigInt(Math.floor(Date.now() / 1000));
+      const nonce = BigInt(Math.floor(Date.now() / 1000));
 
-      setStatus({ type: "loading", msg: "Verifying USDC balance…" });
+      setStatus({ type: "loading", msg: "Checking Allowance & Balance…" });
       const balance = await usdc.balanceOf(account);
-      if (balance < amount) {
-        throw new Error(`Insufficient balance (${ethers.formatUnits(balance, decimals)} available)`);
-      }
+      if (balance < amount) throw new Error("Insufficient USDC balance.");
 
-      setStatus({ type: "loading", msg: "Step 1/2 — Approving USDC…" });
-      const allowance = await usdc.allowance(account, ADDRESSES.cellularVault);
+      const allowance = await usdc.allowance(account, VAULT_ADDR);
       if (allowance < amount) {
-        const approveTx = await usdc.approve(ADDRESSES.cellularVault, amount);
-        await approveTx.wait();
+        setStatus({ type: "loading", msg: "Approving USDC…" });
+        const tx = await usdc.approve(VAULT_ADDR, amount);
+        await tx.wait();
       }
 
-      setStatus({ type: "loading", msg: "Step 2/2 — Opening Vault…" });
-      // Gas limit increased to handle TriSync logic depth
+      setStatus({ type: "loading", msg: "Sending OpenCell Transaction…" });
+      // Use explicit gas price and limit to avoid RPC estimation errors
       const openTx = await vault.openCell(
         form.recipient, amount, secretHash,
-        BigInt(form.ttl), BigInt(fp64), [], contractNonce,
-        { gasLimit: 1200000 }
+        BigInt(form.ttl), BigInt(fp64), [], nonce,
+        { gasLimit: 1500000 }
       );
       
-      setStatus({ type: "loading", msg: "Waiting for blockchain confirmation…" });
+      setStatus({ type: "loading", msg: "Confirming on-chain…" });
       const receipt = await openTx.wait();
-
-      let cellId = null;
-      try {
-        const iface = new ethers.Interface(CELLULAR_VAULT_ABI);
-        for (const log of receipt.logs) {
-            const p = iface.parseLog({ topics: log.topics, data: log.data });
-            if (p && p.name === "CellOpened") { cellId = p.args[0]; break; }
-        }
-      } catch { }
-
-      setStatus({
-        type: "success",
-        msg: "USDC successfully locked in cellular vault!",
-        cellId: cellId || receipt.logs[0]?.topics[1],
-        txHash: receipt.hash,
-      });
+      setStatus({ type: "success", msg: "Vault Created!", cellId: receipt.logs[0]?.topics[1], txHash: receipt.hash });
     } catch (e) {
-      console.error(e);
-      setStatus({ type: "error", msg: formatError(e, "open") });
-    } finally {
-      setTxActive(false);
+      setStatus({ type: "error", msg: formatError(e) });
     }
   }
 
+  // Settle and Refund updated to be simpler
   async function settleCell() {
-    if (!form.cellId || !form.settlSecret) return;
-    setTxActive(true);
-    setStatus({ type: "loading", msg: "Verifying secret and claiming…" });
     try {
       const signer = await getProvider().getSigner();
-      const vault = new ethers.Contract(ADDRESSES.cellularVault, CELLULAR_VAULT_ABI, signer);
+      const vault = new ethers.Contract("0x35eF6b0CF36ec0aE213F23FB40Ceb1A79f23B376", CELLULAR_VAULT_ABI, signer);
       const secretBytes32 = ethers.encodeBytes32String(form.settlSecret);
-      const tx = await vault.settleCell(form.cellId.trim(), secretBytes32, { gasLimit: 800000 });
-      const receipt = await tx.wait();
-      setStatus({ type: "success", msg: "Funds claimed successfully!", txHash: receipt.hash });
-    } catch (e) {
-      setStatus({ type: "error", msg: formatError(e, "settle") });
-    } finally {
-      setTxActive(false);
-    }
+      const tx = await vault.settleCell(form.cellId.trim(), secretBytes32, { gasLimit: 1000000 });
+      await tx.wait();
+      setStatus({ type: "success", msg: "Claimed!" });
+    } catch (e) { setStatus({ type: "error", msg: formatError(e) }); }
   }
 
   async function refundCell() {
-    if (!form.refundCellId) return;
-    setTxActive(true);
-    setStatus({ type: "loading", msg: "Processing refund…" });
     try {
       const signer = await getProvider().getSigner();
-      const vault = new ethers.Contract(ADDRESSES.cellularVault, CELLULAR_VAULT_ABI, signer);
-      const tx = await vault.refundCell(form.refundCellId.trim(), { gasLimit: 500000 });
-      const receipt = await tx.wait();
-      setStatus({ type: "success", msg: "Refund successful!", txHash: receipt.hash });
-    } catch (e) {
-      setStatus({ type: "error", msg: formatError(e, "refund") });
-    } finally {
-      setTxActive(false);
-    }
+      const vault = new ethers.Contract("0x35eF6b0CF36ec0aE213F23FB40Ceb1A79f23B376", CELLULAR_VAULT_ABI, signer);
+      const tx = await vault.refundCell(form.refundCellId.trim(), { gasLimit: 1000000 });
+      await tx.wait();
+      setStatus({ type: "success", msg: "Refunded!" });
+    } catch (e) { setStatus({ type: "error", msg: formatError(e) }); }
   }
 
   return (
-    <>
-      <div className="vault-panel glow-card">
-        <div className="panel-header">
-          <span className="panel-dot" />
-          <h3 className="panel-title">CellularVault</h3>
-        </div>
-
-        <div className="tabs">
-          {["open", "settle", "refund"].map(k => (
-            <button key={k} className={`tab ${tab === k ? "active" : ""}`} onClick={() => { setTab(k); setStatus(null); }}>
-              {k.toUpperCase()}
-            </button>
-          ))}
-        </div>
-
-        <div className="form-group">
-          {tab === "open" && (
-            <>
-              <input className="input" placeholder="Recipient Address" value={form.recipient} onChange={e => setForm({...form, recipient: e.target.value})} />
-              <input className="input" placeholder="Amount (USDC)" value={form.amount} onChange={e => setForm({...form, amount: e.target.value})} type="number" />
-              <input className="input" placeholder="Secret Key" value={form.secret} onChange={e => setForm({...form, secret: e.target.value})} type="password" />
-              <button className="btn btn-primary btn-full" onClick={openCell}>Send &amp; Lock</button>
-            </>
-          )}
-          {tab === "settle" && (
-            <>
-              <input className="input" placeholder="Cell ID" value={form.cellId} onChange={e => setForm({...form, cellId: e.target.value})} />
-              <input className="input" placeholder="Secret Key" value={form.settlSecret} onChange={e => setForm({...form, settlSecret: e.target.value})} type="password" />
-              <button className="btn btn-success btn-full" onClick={settleCell}>Claim Funds</button>
-            </>
-          )}
-          {tab === "refund" && (
-            <>
-              <input className="input" placeholder="Cell ID" value={form.refundCellId} onChange={e => setForm({...form, refundCellId: e.target.value})} />
-              <button className="btn btn-warning btn-full" onClick={refundCell}>Refund Expired</button>
-            </>
-          )}
-        </div>
-
-        {status && (
-          <div className={`status-msg ${status.type}`} style={{ marginTop: 20 }}>
-            <div className="status-row">
-              {status.type === "loading" && <span className="spinner" />}
-              <span>{status.msg}</span>
-            </div>
-            {status.cellId && (
-              <div className="cell-id-display">
-                <code>{status.cellId}</code>
-                <button className="btn-copy" onClick={() => { navigator.clipboard.writeText(status.cellId); showToast("Copied!"); }}>📋</button>
-              </div>
-            )}
-            {status.txHash && (
-              <a href={`${explorer}/tx/${status.txHash}`} target="_blank" rel="noreferrer" className="tx-link">View Transaction ↗</a>
-            )}
-          </div>
+    <div className="vault-panel glow-card">
+      <div className="tabs">
+        {["open", "settle", "refund"].map(k => (
+          <button key={k} className={`tab ${tab === k ? "active" : ""}`} onClick={() => setTab(k)}>{k.toUpperCase()}</button>
+        ))}
+      </div>
+      <div className="form-group" style={{ marginTop: 20 }}>
+        {tab === "open" && (
+          <>
+            <input className="input" placeholder="Recipient" value={form.recipient} onChange={e => setForm({...form, recipient: e.target.value})} />
+            <input className="input" placeholder="Amount" value={form.amount} onChange={e => setForm({...form, amount: e.target.value})} type="number" />
+            <input className="input" placeholder="Secret" value={form.secret} onChange={e => setForm({...form, secret: e.target.value})} type="password" />
+            <button className="btn btn-primary btn-full" onClick={openCell}>SEND</button>
+          </>
+        )}
+        {tab === "settle" && (
+          <>
+            <input className="input" placeholder="Cell ID" value={form.cellId} onChange={e => setForm({...form, cellId: e.target.value})} />
+            <input className="input" placeholder="Secret" value={form.settlSecret} onChange={e => setForm({...form, settlSecret: e.target.value})} type="password" />
+            <button className="btn btn-success btn-full" onClick={settleCell}>CLAIM</button>
+          </>
+        )}
+        {tab === "refund" && (
+          <>
+            <input className="input" placeholder="Cell ID" value={form.refundCellId} onChange={e => setForm({...form, refundCellId: e.target.value})} />
+            <button className="btn btn-warning btn-full" onClick={refundCell}>REFUND</button>
+          </>
         )}
       </div>
-      {toast && <div className="toast">{toast}</div>}
-    </>
+      {status && <div className={`status-msg ${status.type}`} style={{ marginTop: 20 }}>{status.msg}</div>}
+    </div>
   );
 }
