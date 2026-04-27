@@ -58,7 +58,11 @@ export default function VaultPanel({ account, onTxStateChange }) {
     if (msg.includes("CellNotFound")) msg = "Cell not found or already settled/refunded.";
     if (msg.includes("InvalidSecret")) msg = "Invalid secret key. Please check and try again.";
     if (msg.includes("CellExpired")) msg = "Cell has expired. It can only be refunded now.";
-    if (msg.includes("UnauthorizedCaller")) msg = "You are not authorized for this action.";
+    if (msg.includes("UnauthorizedCaller")) msg = "You are not authorized for this action. Only the designated recipient can claim.";
+    if (msg.includes("coalesce") || msg.includes("CALL_EXCEPTION")) msg = "Transaction reverted on-chain. Please verify the Cell ID and secret key are correct.";
+    if (msg.includes("TriSyncIncomplete")) msg = "TriSync verification incomplete. Cell is not ready for settlement.";
+    if (msg.includes("CellAlreadyExists")) msg = "A cell with this combination already exists. Try a different amount or recipient.";
+    if (msg.includes("could not decode")) msg = "Contract call failed. Please check your inputs and try again.";
     return msg;
   }
 
@@ -85,7 +89,7 @@ export default function VaultPanel({ account, onTxStateChange }) {
       };
       const { fingerprint } = computeSimhash(tx);
       const fp64 = fingerprintToUint64(fingerprint);
-      const secretHash = ethers.keccak256(ethers.toUtf8Bytes(form.secret));
+      const secretHash = ethers.keccak256(ethers.encodeBytes32String(form.secret));
       const nonce = BigInt(Math.floor(Date.now() / 1000) + Math.floor(Math.random() * 1000000));
 
       setStatus({ type: "loading", msg: "Step 1/2 — Approving USDC transfer…" });
@@ -155,7 +159,8 @@ export default function VaultPanel({ account, onTxStateChange }) {
     try {
       const signer = await getProvider().getSigner();
       const vault = new ethers.Contract(ADDRESSES.cellularVault, CELLULAR_VAULT_ABI, signer);
-      const tx = await vault.settleCell(form.cellId, form.settlSecret);
+      const secretBytes32 = ethers.encodeBytes32String(form.settlSecret);
+      const tx = await vault.settleCell(form.cellId, secretBytes32, { gasLimit: 500000 });
       const receipt = await tx.wait();
       setStatus({ type: "success", msg: "Settlement complete! Funds released to recipient.", txHash: receipt.hash });
     } catch (e) {
