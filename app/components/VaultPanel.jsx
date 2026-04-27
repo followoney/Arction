@@ -45,25 +45,57 @@ export default function VaultPanel({ account, onTxStateChange }) {
       setStatus({ type: "error", msg: "Secret key must be at least 3 characters." });
       return false;
     }
+    if (form.secret.length > 31) {
+      setStatus({ type: "error", msg: "Secret key must be 31 characters or less." });
+      return false;
+    }
     return true;
   }
 
+  /**
+   * Decode contract revert errors manually.
+   * Arc Testnet RPC sometimes doesn't return error data properly,
+   * so we try multiple decoding strategies.
+   */
   function formatError(e) {
+    // Try to decode custom error from revert data
+    if (e.data && e.data !== "0x") {
+      try {
+        const iface = new ethers.Interface(CELLULAR_VAULT_ABI);
+        const decoded = iface.parseError(e.data);
+        if (decoded) {
+          const errorMap = {
+            "CellAlreadyExists": "A cell with this ID already exists.",
+            "CellNotFound": "Cell not found or already settled/refunded.",
+            "CellExpired": "Cell has expired. It can only be refunded now.",
+            "CellNotExpired": "Cell has not expired yet. Wait for TTL to pass before refunding.",
+            "InvalidSecret": "Invalid secret key. Please check and try again.",
+            "InsufficientAmount": "Amount must be greater than zero.",
+            "UnauthorizedCaller": "You are not authorized. Only the designated recipient can claim, only the depositor can refund.",
+            "TriSyncIncomplete": "TriSync verification incomplete.",
+          };
+          return errorMap[decoded.name] || `Contract error: ${decoded.name}`;
+        }
+      } catch { /* couldn't decode */ }
+    }
+
     let msg = e.reason || e.shortMessage || e.message || "Unknown error";
     // Strip long hex data
     msg = msg.replace(/\s*\(.*0x[a-fA-F0-9]{8,}.*\)/g, "");
-    if (msg.includes("user rejected")) msg = "Transaction was rejected by user.";
-    if (msg.includes("insufficient funds")) msg = "Insufficient USDC balance.";
-    if (msg.includes("CellNotExpired")) msg = "Cell has not expired yet. Wait for TTL to pass before refunding.";
-    if (msg.includes("CellNotFound")) msg = "Cell not found or already settled/refunded.";
-    if (msg.includes("InvalidSecret")) msg = "Invalid secret key. Please check and try again.";
-    if (msg.includes("CellExpired")) msg = "Cell has expired. It can only be refunded now.";
-    if (msg.includes("UnauthorizedCaller")) msg = "You are not authorized for this action. Only the designated recipient can claim.";
-    if (msg.includes("coalesce") || msg.includes("CALL_EXCEPTION")) msg = "Transaction reverted on-chain. Please verify the Cell ID and secret key are correct.";
-    if (msg.includes("TriSyncIncomplete")) msg = "TriSync verification incomplete. Cell is not ready for settlement.";
-    if (msg.includes("CellAlreadyExists")) msg = "A cell with this combination already exists. Try a different amount or recipient.";
-    if (msg.includes("could not decode")) msg = "Contract call failed. Please check your inputs and try again.";
-    if (msg.includes("missing revert data")) msg = "Transaction failed. If this cell was opened before the latest update, it may be incompatible. Please open a new cell and try again.";
+    // Map known error patterns to user-friendly messages
+    if (msg.includes("user rejected")) return "Transaction was rejected by user.";
+    if (msg.includes("insufficient funds")) return "Insufficient USDC balance.";
+    if (msg.includes("CellNotExpired")) return "Cell has not expired yet. Wait for TTL to pass before refunding.";
+    if (msg.includes("CellNotFound")) return "Cell not found or already settled/refunded.";
+    if (msg.includes("InvalidSecret")) return "Invalid secret key. Please check and try again.";
+    if (msg.includes("CellExpired")) return "Cell has expired. It can only be refunded now.";
+    if (msg.includes("UnauthorizedCaller")) return "You are not authorized. Only the designated recipient can claim.";
+    if (msg.includes("TriSyncIncomplete")) return "TriSync verification incomplete.";
+    if (msg.includes("CellAlreadyExists")) return "A cell with this ID already exists.";
+    if (msg.includes("unknown custom error")) return "Transaction reverted. Check: Is the cell still active? Are you the correct wallet? Has the TTL expired for refunds?";
+    if (msg.includes("coalesce") || msg.includes("CALL_EXCEPTION")) return "Transaction reverted on-chain. Please verify Cell ID and secret.";
+    if (msg.includes("missing revert data")) return "Transaction failed. Cell may not exist or inputs are incorrect.";
+    if (msg.includes("could not decode")) return "Contract call failed. Please check your inputs.";
     return msg;
   }
 
@@ -93,7 +125,7 @@ export default function VaultPanel({ account, onTxStateChange }) {
       const secretHash = ethers.keccak256(ethers.encodeBytes32String(form.secret));
       const nonce = BigInt(Math.floor(Date.now() / 1000) + Math.floor(Math.random() * 1000000));
 
-      setStatus({ type: "loading", msg: "Step 1/2 — Approving USDC transfer…" });
+      setStatus({ type: "loading", msg: "Step 1/2 — Approve USDC in your wallet…" });
       const currentAllowance = await usdc.allowance(account, ADDRESSES.cellularVault);
 
       if (currentAllowance < amount) {
@@ -101,12 +133,13 @@ export default function VaultPanel({ account, onTxStateChange }) {
         await approveTx.wait();
       }
 
-      setStatus({ type: "loading", msg: "Step 2/2 — Opening cellular vault…" });
+      setStatus({ type: "loading", msg: "Step 2/2 — Confirm cell opening in your wallet…" });
       const openTx = await vault.openCell(
         form.recipient, amount, secretHash,
         BigInt(form.ttl), BigInt(fp64), [], nonce,
         { gasLimit: 500000 }
       );
+      setStatus({ type: "loading", msg: "Transaction sent — waiting for confirmation…" });
       const receipt = await openTx.wait();
 
       // Properly parse CellOpened event
@@ -151,10 +184,9 @@ export default function VaultPanel({ account, onTxStateChange }) {
       setStatus({ type: "error", msg: "Please enter a valid Cell ID (0x...)" });
       return;
     }
-    // Validate Cell ID is proper bytes32 (66 chars = 0x + 64 hex)
     const cleanCellId = form.cellId.trim();
     if (cleanCellId.length !== 66) {
-      setStatus({ type: "error", msg: `Cell ID must be 66 characters (0x + 64 hex). Got ${cleanCellId.length} characters.` });
+      setStatus({ type: "error", msg: `Cell ID must be 66 characters (0x + 64 hex). Got ${cleanCellId.length} chars.` });
       return;
     }
     if (!form.settlSecret || form.settlSecret.length < 3) {
@@ -165,40 +197,15 @@ export default function VaultPanel({ account, onTxStateChange }) {
       setStatus({ type: "error", msg: "Secret key must be 31 characters or less." });
       return;
     }
+
     setTxActive(true);
-    setStatus({ type: "loading", msg: "Verifying cell on-chain…" });
+    setStatus({ type: "loading", msg: "Confirm transaction in your wallet…" });
     try {
-      const provider = getProvider();
-      const signer = await provider.getSigner();
+      const signer = await getProvider().getSigner();
       const vault = new ethers.Contract(ADDRESSES.cellularVault, CELLULAR_VAULT_ABI, signer);
-
-      // Pre-check: verify cell exists and is claimable
-      try {
-        const cell = await vault.cells(cleanCellId);
-        if (!cell.active) {
-          setStatus({ type: "error", msg: "Cell not found or already settled/refunded." });
-          setTxActive(false);
-          return;
-        }
-        const signerAddr = await signer.getAddress();
-        if (cell.recipient.toLowerCase() !== signerAddr.toLowerCase()) {
-          setStatus({ type: "error", msg: `You are not the designated recipient. This cell can only be claimed by ${cell.recipient.slice(0, 8)}…${cell.recipient.slice(-6)}` });
-          setTxActive(false);
-          return;
-        }
-        const now = BigInt(Math.floor(Date.now() / 1000));
-        if (now > cell.deadline) {
-          setStatus({ type: "error", msg: "Cell has expired. It can only be refunded by the sender now." });
-          setTxActive(false);
-          return;
-        }
-      } catch (readErr) {
-        console.warn("Pre-check failed, proceeding anyway:", readErr);
-      }
-
-      setStatus({ type: "loading", msg: "Settling cell — sending transaction…" });
       const secretBytes32 = ethers.encodeBytes32String(form.settlSecret);
       const tx = await vault.settleCell(cleanCellId, secretBytes32, { gasLimit: 500000 });
+      setStatus({ type: "loading", msg: "Transaction sent — waiting for confirmation…" });
       const receipt = await tx.wait();
       setStatus({ type: "success", msg: "Settlement complete! Funds released to recipient.", txHash: receipt.hash });
     } catch (e) {
@@ -214,15 +221,23 @@ export default function VaultPanel({ account, onTxStateChange }) {
       setStatus({ type: "error", msg: "Please enter a valid Cell ID (0x...)" });
       return;
     }
+    const cleanRefundId = form.refundCellId.trim();
+    if (cleanRefundId.length !== 66) {
+      setStatus({ type: "error", msg: `Cell ID must be 66 characters (0x + 64 hex). Got ${cleanRefundId.length} chars.` });
+      return;
+    }
+
     setTxActive(true);
-    setStatus({ type: "loading", msg: "Processing refund…" });
+    setStatus({ type: "loading", msg: "Confirm refund in your wallet…" });
     try {
       const signer = await getProvider().getSigner();
       const vault = new ethers.Contract(ADDRESSES.cellularVault, CELLULAR_VAULT_ABI, signer);
-      const tx = await vault.refundCell(form.refundCellId);
+      const tx = await vault.refundCell(cleanRefundId, { gasLimit: 500000 });
+      setStatus({ type: "loading", msg: "Transaction sent — waiting for confirmation…" });
       const receipt = await tx.wait();
       setStatus({ type: "success", msg: "Refund complete! USDC returned to depositor.", txHash: receipt.hash });
     } catch (e) {
+      console.error("Refund error:", e);
       setStatus({ type: "error", msg: formatError(e) });
     } finally {
       setTxActive(false);
@@ -276,7 +291,7 @@ export default function VaultPanel({ account, onTxStateChange }) {
             <div>
               <label className="input-label">
                 <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
-                Secret Key
+                Secret Key (max 31 chars)
               </label>
               <input className="input" placeholder="Enter a secret passphrase" value={form.secret}
                 onChange={(e) => setForm({ ...form, secret: e.target.value })} type="password" />
@@ -291,7 +306,7 @@ export default function VaultPanel({ account, onTxStateChange }) {
             </div>
             <button className="btn btn-primary btn-full" onClick={openCell}
               disabled={!form.recipient || !form.amount || !form.secret}>
-              Send & Lock USDC
+              Send &amp; Lock USDC
             </button>
           </div>
         )}
