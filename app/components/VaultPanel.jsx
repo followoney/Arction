@@ -63,6 +63,7 @@ export default function VaultPanel({ account, onTxStateChange }) {
     if (msg.includes("TriSyncIncomplete")) msg = "TriSync verification incomplete. Cell is not ready for settlement.";
     if (msg.includes("CellAlreadyExists")) msg = "A cell with this combination already exists. Try a different amount or recipient.";
     if (msg.includes("could not decode")) msg = "Contract call failed. Please check your inputs and try again.";
+    if (msg.includes("missing revert data")) msg = "Transaction failed. If this cell was opened before the latest update, it may be incompatible. Please open a new cell and try again.";
     return msg;
   }
 
@@ -150,20 +151,58 @@ export default function VaultPanel({ account, onTxStateChange }) {
       setStatus({ type: "error", msg: "Please enter a valid Cell ID (0x...)" });
       return;
     }
+    // Validate Cell ID is proper bytes32 (66 chars = 0x + 64 hex)
+    const cleanCellId = form.cellId.trim();
+    if (cleanCellId.length !== 66) {
+      setStatus({ type: "error", msg: `Cell ID must be 66 characters (0x + 64 hex). Got ${cleanCellId.length} characters.` });
+      return;
+    }
     if (!form.settlSecret || form.settlSecret.length < 3) {
       setStatus({ type: "error", msg: "Please enter the secret key used when opening the cell." });
       return;
     }
+    if (form.settlSecret.length > 31) {
+      setStatus({ type: "error", msg: "Secret key must be 31 characters or less." });
+      return;
+    }
     setTxActive(true);
-    setStatus({ type: "loading", msg: "Settling cell — verifying secret…" });
+    setStatus({ type: "loading", msg: "Verifying cell on-chain…" });
     try {
-      const signer = await getProvider().getSigner();
+      const provider = getProvider();
+      const signer = await provider.getSigner();
       const vault = new ethers.Contract(ADDRESSES.cellularVault, CELLULAR_VAULT_ABI, signer);
+
+      // Pre-check: verify cell exists and is claimable
+      try {
+        const cell = await vault.cells(cleanCellId);
+        if (!cell.active) {
+          setStatus({ type: "error", msg: "Cell not found or already settled/refunded." });
+          setTxActive(false);
+          return;
+        }
+        const signerAddr = await signer.getAddress();
+        if (cell.recipient.toLowerCase() !== signerAddr.toLowerCase()) {
+          setStatus({ type: "error", msg: `You are not the designated recipient. This cell can only be claimed by ${cell.recipient.slice(0, 8)}…${cell.recipient.slice(-6)}` });
+          setTxActive(false);
+          return;
+        }
+        const now = BigInt(Math.floor(Date.now() / 1000));
+        if (now > cell.deadline) {
+          setStatus({ type: "error", msg: "Cell has expired. It can only be refunded by the sender now." });
+          setTxActive(false);
+          return;
+        }
+      } catch (readErr) {
+        console.warn("Pre-check failed, proceeding anyway:", readErr);
+      }
+
+      setStatus({ type: "loading", msg: "Settling cell — sending transaction…" });
       const secretBytes32 = ethers.encodeBytes32String(form.settlSecret);
-      const tx = await vault.settleCell(form.cellId, secretBytes32, { gasLimit: 500000 });
+      const tx = await vault.settleCell(cleanCellId, secretBytes32, { gasLimit: 500000 });
       const receipt = await tx.wait();
       setStatus({ type: "success", msg: "Settlement complete! Funds released to recipient.", txHash: receipt.hash });
     } catch (e) {
+      console.error("Settle error:", e);
       setStatus({ type: "error", msg: formatError(e) });
     } finally {
       setTxActive(false);
