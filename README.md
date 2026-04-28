@@ -2,6 +2,8 @@
 
 > **Corporate-grade DApp on Arc — Simhash spam filter + CellularVault parallel execution with USDC settlement.**
 
+📄 **[Read the Whitepaper →](WHITEPAPER.md)**
+
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/followoney/Arction)
 
 ---
